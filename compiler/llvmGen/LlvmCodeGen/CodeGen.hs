@@ -170,6 +170,9 @@ barrier = do
     let s = Fence False SyncSeqCst
     return (unitOL s, [])
 
+barrierW :: WriterT LlvmAccum LlvmM ()
+barrierW = statement $ Fence False SyncSeqCst
+
 -- | Foreign Calls
 genCall :: ForeignTarget -> [CmmFormal] -> [CmmActual]
               -> LlvmM StmtData
@@ -245,13 +248,19 @@ genCall (PrimTarget (MO_AtomicRMW width amop)) [dst] [addr, n] = runStmtsDecls $
                AMO_Nand -> LAO_Nand
                AMO_Or   -> LAO_Or
                AMO_Xor  -> LAO_Xor
+    barrierW
     retVar <- doExprW targetTy $ AtomicRMW op ptrVar nVar SyncSeqCst
+    barrierW
     statement $ Store retVar dstVar
+    barrierW
 
 genCall (PrimTarget (MO_AtomicRead _)) [dst] [addr] = runStmtsDecls $ do
     dstV <- getCmmRegW (CmmLocal dst)
+    barrierW
     v1 <- genLoadW True addr (localRegType dst)
+    barrierW
     statement $ Store v1 dstV
+    barrierW
 
 genCall (PrimTarget (MO_Cmpxchg _width))
         [dst] [addr, old, new] = runStmtsDecls $ do
@@ -262,10 +271,14 @@ genCall (PrimTarget (MO_Cmpxchg _width))
         ptrExpr = Cast LM_Inttoptr addrVar (pLift targetTy)
     ptrVar <- doExprW (pLift targetTy) ptrExpr
     dstVar <- getCmmRegW (CmmLocal dst)
+    barrierW
     retVar <- doExprW (LMStructU [targetTy,i1])
               $ CmpXChg ptrVar oldVar newVar SyncSeqCst SyncSeqCst
+    barrierW
     retVar' <- doExprW targetTy $ ExtractV retVar 0
+    barrierW
     statement $ Store retVar' dstVar
+    barrierW
 
 genCall (PrimTarget (MO_AtomicWrite _width)) [] [addr, val] = runStmtsDecls $ do
     addrVar <- exprToVarW addr
@@ -273,7 +286,9 @@ genCall (PrimTarget (MO_AtomicWrite _width)) [] [addr, val] = runStmtsDecls $ do
     let ptrTy = pLift $ getVarType valVar
         ptrExpr = Cast LM_Inttoptr addrVar ptrTy
     ptrVar <- doExprW ptrTy ptrExpr
+    barrierW
     statement $ Expr $ AtomicRMW LAO_Xchg ptrVar valVar SyncSeqCst
+    barrierW
 
 -- Handle memcpy function specifically since llvm's intrinsic version takes
 -- some extra parameters.
