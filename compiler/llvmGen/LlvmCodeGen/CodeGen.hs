@@ -255,6 +255,7 @@ genCall (PrimTarget (MO_AtomicRMW width amop)) [dst] [addr, n] = runStmtsDecls $
                AMO_Xor  -> LAO_Xor
     barrier
     retVar <- doExprW targetTy $ AtomicRMW op ptrVar nVar SyncSeqCst
+    barrier
     statement $ Store retVar dstVar
     barrier
 
@@ -262,6 +263,7 @@ genCall (PrimTarget (MO_AtomicRead _)) [dst] [addr] = runStmtsDecls $ do
     dstV <- getCmmRegW (CmmLocal dst)
     barrier
     v1 <- genLoadW True addr (localRegType dst)
+    barrier
     statement $ Store v1 dstV
     barrier
 
@@ -278,6 +280,7 @@ genCall (PrimTarget (MO_Cmpxchg _width))
     retVar <- doExprW (LMStructU [targetTy,i1])
               $ CmpXChg ptrVar oldVar newVar SyncSeqCst SyncSeqCst
     retVar' <- doExprW targetTy $ ExtractV retVar 0
+    barrier
     statement $ Store retVar' dstVar
     barrier
 
@@ -287,6 +290,7 @@ genCall (PrimTarget (MO_AtomicWrite _width)) [] [addr, val] = runStmtsDecls $ do
     let ptrTy = pLift $ getVarType valVar
         ptrExpr = Cast LM_Inttoptr addrVar ptrTy
     ptrVar <- doExprW ptrTy ptrExpr
+    barrier
     statement $ Expr $ AtomicRMW LAO_Xchg ptrVar valVar SyncSeqCst
     barrier
 
